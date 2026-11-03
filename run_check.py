@@ -31,6 +31,7 @@ files = {
     'app.py':                       5_000,
     'train_model.py':               5_000,
     'features.py':                  2_000,
+    'mnist_features.py':            1_000,
     'requirements.txt':             50,
     'model/asl_model.pkl':          1_000_000,
     'model/hand_landmarker.task':   1_000_000,
@@ -97,18 +98,26 @@ try:
         check('Model loads (bare clf)', True, type(model_clf).__name__)
 
     n_feat = getattr(model_clf, 'n_features_in_', 0)
-    n_cls  = getattr(model_clf, 'n_classes_', 0)
-    # Accept 63 (old) or 99 (new) feature count
-    feat_ok = n_feat in (63, 99)
-    check('Feature count is 63 or 99', feat_ok, str(n_feat))
-    check('Class count   == 26', n_cls  == 26, str(n_cls))
+    # VotingClassifier wraps sub-estimators; n_classes_ may be 0 on the wrapper
+    n_cls = getattr(model_clf, 'n_classes_', 0)
+    if n_cls == 0 and le is not None:
+        n_cls = len(le.classes_)
+    elif n_cls == 0:
+        try:
+            n_cls = model_clf.estimators_[0].n_classes_
+        except Exception:
+            n_cls = 0
+    # Accept 63/99 (old landmark models) or 840 (MNIST pixel model)
+    feat_ok = n_feat in (63, 99, 840)
+    check('Feature count is 63, 99 or 840', feat_ok, str(n_feat))
+    check('Class count is 24 or 26', n_cls in (24, 26), str(n_cls))
     dummy = np.random.default_rng(0).random((1, n_feat)).astype(np.float32)
     proba = model_clf.predict_proba(dummy)[0]
-    check('predict_proba returns 26 values', len(proba) == 26,
+    check('predict_proba returns 24 or 26 values', len(proba) in (24, 26),
           'sum={:.4f}'.format(proba.sum()))
     if le is not None:
         classes = le.classes_.tolist()
-        check('LabelEncoder has 26 classes', len(classes) == 26,
+        check('LabelEncoder has 24 or 26 classes', len(classes) in (24, 26),
               str(len(classes)))
 except Exception as e:
     check('ML model', False, str(e))
@@ -192,8 +201,8 @@ try:
           isinstance(d.get('test_accuracy'), (int, float)),
           str(d.get('test_accuracy')))
     pca = d.get('per_class_accuracy', {})
-    check('per_class_accuracy has 26 entries',
-          isinstance(pca, dict) and len(pca) == 26,
+    check('per_class_accuracy has 24 or 26 entries',
+          isinstance(pca, dict) and len(pca) in (24, 26),
           str(len(pca)) + ' entries')
     tl = d.get('training_loss', [])
     check('training_loss has 30 data points',

@@ -20,7 +20,8 @@ model/*.pkl
 # MediaPipe model binary (auto-downloaded on first startup)
 model/hand_landmarker.task
 
-# Collected real-hand data (user-specific, generate with /collect page)
+# Large dataset CSVs (download from Kaggle: ASL Sign MNIST)
+MNIST dataset/
 data/
 
 # OS

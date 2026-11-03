@@ -139,3 +139,4 @@ Minimal, professional UI inspired by Linear, Vercel, and GitHub. Built without U
 - Font: Inter (Google Fonts)
 - Palette: `#F8FAFC` background · `#3157C8` accent · `#172033` text · `#0F1117` video surface
 - No gradients, no animations, no glow effects
+

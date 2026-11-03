@@ -2,6 +2,8 @@
 ASL Vision - Real-Time American Sign Language Recognition
 Flask Backend Application
 Compatible with MediaPipe >= 1.0 (Tasks API only)
+Training: ASL Sign MNIST dataset (sign_mnist_train/test.csv)
+Inference: MediaPipe hand bounding box -> 28x28 grayscale crop -> 840-d features
 """
 
 import os
@@ -16,13 +18,21 @@ import numpy as np
 from flask import Flask, render_template, request, jsonify, Response, stream_with_context
 from flask_cors import CORS
 
-# Shared feature engineering (99-d, scale/translation invariant)
+# MNIST pixel-based feature extraction (840-d)
+# Used identically during training (train_model.py) and inference here.
 try:
-    from features import extract_features, NUM_FEATURES
-    FEATURES_AVAILABLE = True
+    from mnist_features import extract_features as mnist_extract_features, NUM_FEATURES
+    MNIST_FEATURES_AVAILABLE = True
 except ImportError:
-    FEATURES_AVAILABLE = False
-    NUM_FEATURES = 63   # fallback: raw landmark count
+    MNIST_FEATURES_AVAILABLE = False
+    NUM_FEATURES = 840
+
+# Legacy landmark features (kept for /collect page compatibility)
+try:
+    from features import extract_features as landmark_extract_features
+    LANDMARK_FEATURES_AVAILABLE = True
+except ImportError:
+    LANDMARK_FEATURES_AVAILABLE = False
 
 # ---------------------------------------------------------------------------
 # App setup
@@ -178,19 +188,101 @@ def _decode_image(data_uri: str):
 
 
 # ---------------------------------------------------------------------------
-# Helper – extract 21 hand landmarks via Tasks API
+# Core inference helper
+# Dual output: pixel features for the MNIST model + landmarks for overlay
 # ---------------------------------------------------------------------------
-def _extract_landmarks(bgr_img):
-    """Return (feature_vector, xy_list_21) or (None, []).
 
-    If features.py is available, returns a 99-d invariant feature vector.
-    Otherwise falls back to the raw 63-d landmark coordinates.
+def _detect_hand_and_extract(bgr_img):
     """
+    Run MediaPipe on the full webcam frame.
+
+    Returns
+    -------
+    features : np.ndarray or None
+        840-d pixel feature vector derived from the cropped hand region.
+        None if no hand detected or MediaPipe unavailable.
+    xy_pairs : list of [x, y]
+        Normalised landmark coordinates for canvas overlay (21 points).
+    """
+    if not MEDIAPIPE_AVAILABLE or _mp_detector is None:
+        return None, []
+
+    try:
+        import mediapipe as mp
+        h_img, w_img = bgr_img.shape[:2]
+        rgb    = cv2.cvtColor(bgr_img, cv2.COLOR_BGR2RGB)
+        mp_img = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+        result = _mp_detector.detect(mp_img)
+
+        if not result.hand_landmarks:
+            return None, []
+
+        hand   = result.hand_landmarks[0]
+        xy     = [[lm.x, lm.y] for lm in hand]
+
+        # ── Compute bounding box from landmark positions ──────────────────
+        xs     = [lm.x for lm in hand]
+        ys     = [lm.y for lm in hand]
+        x_span = max(xs) - min(xs)
+        y_span = max(ys) - min(ys)
+        PAD    = 0.22   # 22% padding so the full hand fits
+
+        x1 = max(0.0, min(xs) - PAD * x_span)
+        x2 = min(1.0, max(xs) + PAD * x_span)
+        y1 = max(0.0, min(ys) - PAD * y_span)
+        y2 = min(1.0, max(ys) + PAD * y_span)
+
+        # Make crop square (sign-MNIST images are square)
+        cx     = (x1 + x2) / 2
+        cy     = (y1 + y2) / 2
+        half   = max((x2 - x1), (y2 - y1)) / 2
+        x1     = max(0.0, cx - half)
+        x2     = min(1.0, cx + half)
+        y1     = max(0.0, cy - half)
+        y2     = min(1.0, cy + half)
+
+        # Convert to pixel coords
+        px1 = max(0, int(x1 * w_img))
+        py1 = max(0, int(y1 * h_img))
+        px2 = min(w_img, int(x2 * w_img))
+        py2 = min(h_img, int(y2 * h_img))
+
+        crop = bgr_img[py1:py2, px1:px2]
+        if crop.size == 0 or crop.shape[0] < 4 or crop.shape[1] < 4:
+            return None, xy   # Return landmarks for overlay even if crop fails
+
+        # ── Preprocess to match Sign-MNIST format ─────────────────────────
+        # 1. Grayscale
+        gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+        # 2. CLAHE contrast normalisation (handles lighting variation)
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(4, 4))
+        gray  = clahe.apply(gray)
+        # 3. Resize to 28×28
+        gray28 = cv2.resize(gray, (28, 28), interpolation=cv2.INTER_AREA)
+        # 4. Normalise to [0, 1]
+        normed = gray28.astype(np.float32) / 255.0
+
+        # ── Extract 840-d features ────────────────────────────────────────
+        if MNIST_FEATURES_AVAILABLE:
+            feat = mnist_extract_features(normed.flatten())
+        else:
+            feat = normed.flatten()   # raw 784, graceful degradation
+
+        return feat, xy
+
+    except Exception as exc:
+        logger.error("Hand detection / feature extraction error: %s", exc)
+        return None, []
+
+
+# Kept for /collect page (landmark-based collection)
+def _extract_landmarks_raw(bgr_img):
+    """Return (raw_63, xy_pairs) for the /api/collect endpoint."""
     if not MEDIAPIPE_AVAILABLE or _mp_detector is None:
         return None, []
     try:
         import mediapipe as mp
-        rgb = cv2.cvtColor(bgr_img, cv2.COLOR_BGR2RGB)
+        rgb    = cv2.cvtColor(bgr_img, cv2.COLOR_BGR2RGB)
         mp_img = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
         result = _mp_detector.detect(mp_img)
         if not result.hand_landmarks:
@@ -201,15 +293,12 @@ def _extract_landmarks(bgr_img):
             flat.extend([lm.x, lm.y, lm.z])
             xy.append([lm.x, lm.y])
         raw63 = np.array(flat, dtype=np.float32)
-        if FEATURES_AVAILABLE:
+        if LANDMARK_FEATURES_AVAILABLE:
             try:
-                feat_vec = extract_features(raw63)   # shape (99,)
-            except Exception as fe:
-                logger.warning("Feature extraction failed, using raw63: %s", fe)
-                feat_vec = raw63
-        else:
-            feat_vec = raw63
-        return feat_vec, xy
+                return landmark_extract_features(raw63), xy
+            except Exception:
+                pass
+        return raw63, xy
     except Exception as exc:
         logger.error("Landmark extraction error: %s", exc)
     return None, []
@@ -317,13 +406,13 @@ def api_predict():
             "letter": None, "confidence": 0, "landmarks": [],
         }), 400
 
-    features, xy_pairs = _extract_landmarks(bgr)
+    features, xy_pairs = _detect_hand_and_extract(bgr)
 
     if features is None:
         return jsonify({
             "letter": None,
             "confidence": 0,
-            "landmarks": [],
+            "landmarks": xy_pairs,
             "hand_detected": False,
             "error": "No hand detected" if MEDIAPIPE_AVAILABLE else "MediaPipe not available",
         })
@@ -343,10 +432,8 @@ def api_predict():
         confidence = float(proba[raw_idx])
 
         if label_encoder is not None:
-            # New model format — label_encoder decodes directly to letter
             letter = str(label_encoder.inverse_transform([raw_idx])[0])
         else:
-            # Old bare-clf format — classes_ holds 0-25 int indices
             class_val = model.classes_[raw_idx] if hasattr(model, "classes_") else raw_idx
             letter    = _idx_to_letter(class_val)
 
@@ -410,7 +497,7 @@ def api_collect():
     if bgr is None:
         return jsonify({"saved": False, "error": "Decode failed"}), 400
 
-    feat_vec, _ = _extract_landmarks(bgr)
+    feat_vec, _ = _extract_landmarks_raw(bgr)
     if feat_vec is None:
         return jsonify({"saved": False, "hand_detected": False})
 

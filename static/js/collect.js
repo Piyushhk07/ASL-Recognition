@@ -303,3 +303,4 @@ if (btnTrain)   btnTrain.addEventListener('click', trainModel);
 /* ── Init ────────────────────────────────────────────────── */
 buildGrids();
 loadServerCounts();
+
