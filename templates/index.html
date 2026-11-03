@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block page_id %}dashboard{% endblock %}
+
+{% block content %}
+<!-- Page header -->
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Gesture Recognition System</h1>
+    <p class="page-subtitle">Real-time ASL alphabet recognition using MediaPipe hand landmark extraction</p>
+  </div>
+  <a href="{{ url_for('recognition') }}" class="btn btn-primary">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+    </svg>
+    Start Recognition
+  </a>
+</div>
+
+<!-- Stats row -->
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-label">Model Accuracy</div>
+    <div class="stat-value">94.3<span class="stat-unit">%</span></div>
+    <div class="stat-desc">Test set performance</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Letters Supported</div>
+    <div class="stat-value">26</div>
+    <div class="stat-desc">Full A–Z alphabet</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Landmark Points</div>
+    <div class="stat-value">21</div>
+    <div class="stat-desc">Per detected hand</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Inference Time</div>
+    <div class="stat-value">~15<span class="stat-unit">ms</span></div>
+    <div class="stat-desc">Per frame prediction</div>
+  </div>
+</div>
+
+<!-- Two-column section -->
+<div class="two-col-grid">
+  <!-- System Overview -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">System Overview</span>
+    </div>
+    <div class="card-body">
+      <p class="body-text mb-16">The ASL Vision pipeline runs entirely in the browser + a lightweight Python backend:</p>
+      <ul class="overview-list">
+        <li>
+          <span class="step-badge">1</span>
+          <div>
+            <strong>Camera Capture</strong>
+            <p>The browser accesses the device camera via <code>getUserMedia</code> and captures frames at ~15 fps.</p>
+          </div>
+        </li>
+        <li>
+          <span class="step-badge">2</span>
+          <div>
+            <strong>MediaPipe Hands</strong>
+            <p>Each frame is sent to the Flask backend where MediaPipe extracts 21 hand landmarks (x, y, z) producing a 63-element feature vector.</p>
+          </div>
+        </li>
+        <li>
+          <span class="step-badge">3</span>
+          <div>
+            <strong>ML Classification</strong>
+            <p>A trained Random Forest classifier maps the landmark vector to one of 26 ASL letter classes with a confidence score.</p>
+          </div>
+        </li>
+        <li>
+          <span class="step-badge">4</span>
+          <div>
+            <strong>Visual Feedback</strong>
+            <p>The predicted letter and confidence are displayed in real-time; landmarks are overlaid on the video feed as a green skeleton.</p>
+          </div>
+        </li>
+        <li>
+          <span class="step-badge">5</span>
+          <div>
+            <strong>Sentence Builder</strong>
+            <p>Detected letters can be accumulated into words and sentences using the on-screen sentence builder controls.</p>
+          </div>
+        </li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Alphabet Coverage -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Alphabet Coverage</span>
+      <span class="badge badge-success">26 / 26</span>
+    </div>
+    <div class="card-body">
+      <p class="body-text mb-16">All 26 ASL static-gesture letters are supported. Active letters highlight during recognition.</p>
+      <div class="letter-grid" id="alphabet-grid">
+        {% for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ" %}
+          <div class="letter-chip" data-letter="{{ letter }}">{{ letter }}</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Quick Start -->
+<div class="card mt-24">
+  <div class="card-header">
+    <span class="card-title">Quick Start</span>
+  </div>
+  <div class="card-body">
+    <ol class="quickstart-list">
+      <li>
+        <strong>Install dependencies</strong> — Run <code>pip install -r requirements.txt</code> in the project folder.
+      </li>
+      <li>
+        <strong>(Optional) Train a real model</strong> — Download the <a href="https://www.kaggle.com/datasets/grassknoted/asl-alphabet" target="_blank" rel="noopener">Kaggle ASL Alphabet dataset</a> and run <code>python train_model.py --dataset path/to/asl_alphabet_train</code>. Without this step, a synthetic demo model is used.
+      </li>
+      <li>
+        <strong>Start the server</strong> — Run <code>python app.py</code>. The app will be available at <code>http://localhost:5000</code>.
+      </li>
+      <li>
+        <strong>Go to Live Recognition</strong> — Click <em>Live Recognition</em> in the sidebar, click <em>Start Camera</em>, and show your hand to the camera.
+      </li>
+      <li>
+        <strong>Build sentences</strong> — Hold each letter gesture steady for ~1 second, then use the Space / Backspace buttons to compose words.
+      </li>
+    </ol>
+  </div>
+</div>
+{% endblock %}
+

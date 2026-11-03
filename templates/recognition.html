@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block title %}Live Recognition{% endblock %}
+{% block page_id %}recognition{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Live Recognition</h1>
+    <p class="page-subtitle">Show an ASL hand gesture to your camera for real-time letter detection</p>
+  </div>
+  <div class="header-actions">
+    <button class="btn btn-primary" id="btn-start">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="5 3 19 12 5 21 5 3"/>
+      </svg>
+      Start Camera
+    </button>
+    <button class="btn btn-secondary" id="btn-stop" style="display:none;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="6" y="6" width="12" height="12"/>
+      </svg>
+      Stop Camera
+    </button>
+  </div>
+</div>
+
+<!-- Two-column layout -->
+<div class="recognition-layout">
+
+  <!-- LEFT: Camera -->
+  <div class="recognition-left">
+    <!-- Camera feed card -->
+    <div class="card camera-card">
+      <div class="card-header">
+        <span class="card-title">Camera Feed</span>
+        <span class="camera-status-dot" id="camera-dot"></span>
+      </div>
+      <div class="video-wrapper">
+        <video id="video" autoplay playsinline muted></video>
+        <canvas id="canvas-overlay"></canvas>
+        <!-- Error overlay -->
+        <div class="video-error" id="video-error" style="display:none;">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#64748B" stroke-width="1.5">
+            <path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+            <line x1="1" y1="1" x2="23" y2="23" stroke="#DC2626"/>
+          </svg>
+          <p id="video-error-msg">Camera not started</p>
+          <p class="video-error-hint">Click "Start Camera" to begin</p>
+        </div>
+        <!-- Idle overlay (shown before camera starts) -->
+        <div class="video-idle" id="video-idle">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#334155" stroke-width="1.5">
+            <path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+          </svg>
+          <p>Camera inactive</p>
+        </div>
+      </div>
+      <!-- Technical stats bar -->
+      <div class="tech-stats">
+        <div class="tech-stat">
+          <span class="tech-stat-label">FPS</span>
+          <span class="tech-stat-value" id="stat-fps">--</span>
+        </div>
+        <div class="tech-stat-sep"></div>
+        <div class="tech-stat">
+          <span class="tech-stat-label">Hand</span>
+          <span class="tech-stat-value" id="stat-hand">--</span>
+        </div>
+        <div class="tech-stat-sep"></div>
+        <div class="tech-stat">
+          <span class="tech-stat-label">Landmarks</span>
+          <span class="tech-stat-value" id="stat-landmarks">--</span>
+        </div>
+        <div class="tech-stat-sep"></div>
+        <div class="tech-stat">
+          <span class="tech-stat-label">Model</span>
+          <span class="tech-stat-value" id="stat-model">--</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: Prediction + Controls -->
+  <div class="recognition-right">
+
+    <!-- Prediction card -->
+    <div class="card prediction-card">
+      <div class="card-header">
+        <span class="card-title">Prediction</span>
+        <span class="badge" id="pred-status-badge">Inactive</span>
+      </div>
+      <div class="card-body">
+        <!-- Large letter -->
+        <div class="letter-display-wrapper">
+          <div class="letter-display" id="pred-letter">--</div>
+        </div>
+
+        <!-- Confidence -->
+        <div class="confidence-section">
+          <div class="confidence-header">
+            <span class="conf-label">Confidence</span>
+            <span class="conf-value" id="conf-value">0%</span>
+          </div>
+          <div class="confidence-track">
+            <div class="confidence-fill" id="conf-bar" style="width:0%"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sentence builder card -->
+    <div class="card sentence-card">
+      <div class="card-header">
+        <span class="card-title">Sentence Builder</span>
+      </div>
+      <div class="card-body">
+        <textarea class="sentence-area" id="sentence-area" readonly placeholder="Letters will appear here…"></textarea>
+        <div class="sentence-btns">
+          <button class="btn btn-ghost sentence-btn" id="btn-space">Space</button>
+          <button class="btn btn-ghost sentence-btn" id="btn-backspace">⌫ Back</button>
+          <button class="btn btn-ghost sentence-btn" id="btn-clear">Clear</button>
+          <button class="btn btn-ghost sentence-btn" id="btn-copy">Copy</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Gesture history card -->
+    <div class="card history-card">
+      <div class="card-header">
+        <span class="card-title">Recent Gestures</span>
+        <button class="btn-icon" id="btn-clear-history" title="Clear history">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+          </svg>
+        </button>
+      </div>
+      <div class="card-body">
+        <div class="history-chips" id="history-chips">
+          <span class="history-empty">No gestures yet</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/recognition.js') }}"></script>
+{% endblock %}
+

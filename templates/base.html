@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}ASL Vision{% endblock %} — ASL Vision</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}" />
+  {% block head %}{% endblock %}
+</head>
+<body data-page="{% block page_id %}{% endblock %}">
+
+  <!-- ===== SIDEBAR ===== -->
+  <aside class="sidebar">
+    <!-- Logo -->
+    <div class="sidebar-logo">
+      <div class="logo-icon">
+        <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <!-- Palm -->
+          <rect x="8" y="14" width="12" height="10" rx="3" fill="#3157C8"/>
+          <!-- Thumb -->
+          <rect x="4" y="16" width="5" height="4" rx="2" fill="#3157C8"/>
+          <!-- Index finger -->
+          <rect x="8" y="7" width="3" height="9" rx="1.5" fill="#3157C8"/>
+          <!-- Middle finger -->
+          <rect x="12.5" y="5" width="3" height="11" rx="1.5" fill="#3157C8"/>
+          <!-- Ring finger -->
+          <rect x="17" y="7" width="3" height="9" rx="1.5" fill="#3157C8"/>
+          <!-- Pinky -->
+          <rect x="21" y="10" width="2.5" height="6" rx="1.25" fill="#3157C8"/>
+        </svg>
+      </div>
+      <div class="logo-text">
+        <span class="logo-name">ASL Vision</span>
+        <span class="logo-sub">Gesture Recognition</span>
+      </div>
+    </div>
+
+    <!-- Nav -->
+    <nav class="sidebar-nav" role="navigation" aria-label="Main navigation">
+      <a href="{{ url_for('index') }}" class="nav-item" data-nav="dashboard">
+        <span class="nav-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+            <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+          </svg>
+        </span>
+        <span class="nav-label">Dashboard</span>
+      </a>
+
+      <a href="{{ url_for('recognition') }}" class="nav-item" data-nav="recognition">
+        <span class="nav-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M23 7l-7 5 7 5V7z"/>
+            <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+          </svg>
+        </span>
+        <span class="nav-label">Live Recognition</span>
+      </a>
+
+      <a href="{{ url_for('performance') }}" class="nav-item" data-nav="performance">
+        <span class="nav-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+          </svg>
+        </span>
+        <span class="nav-label">Model Performance</span>
+      </a>
+
+      <a href="{{ url_for('about') }}" class="nav-item" data-nav="about">
+        <span class="nav-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="16" x2="12" y2="12"/>
+            <line x1="12" y1="8" x2="12.01" y2="8"/>
+          </svg>
+        </span>
+        <span class="nav-label">About</span>
+      </a>
+    </nav>
+
+    <!-- Status -->
+    <div class="sidebar-status">
+      <div class="status-row">
+        <span class="status-dot" id="sidebar-status-dot"></span>
+        <span class="status-label" id="sidebar-status-text">Checking…</span>
+      </div>
+      <div class="status-sublabel" id="sidebar-model-text">Model: —</div>
+    </div>
+  </aside>
+
+  <!-- ===== MAIN ===== -->
+  <main class="main-content">
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- ===== TOAST ===== -->
+  <div id="toast-container" aria-live="polite"></div>
+
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>
+

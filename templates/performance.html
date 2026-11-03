@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}Model Performance{% endblock %}
+{% block page_id %}performance{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Model Performance</h1>
+    <p class="page-subtitle">Training metrics, loss curves, and per-class accuracy for the ASL classifier</p>
+  </div>
+  <button class="btn btn-secondary" id="btn-refresh-metrics">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/>
+    </svg>
+    Refresh
+  </button>
+</div>
+
+<!-- Metrics grid -->
+<div class="metrics-grid">
+  <div class="metric-card">
+    <div class="metric-label">Test Accuracy</div>
+    <div class="metric-value" id="m-test-acc">—</div>
+    <div class="metric-sub">Held-out test set</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-label">Train Accuracy</div>
+    <div class="metric-value" id="m-train-acc">—</div>
+    <div class="metric-sub">Training set</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-label">Val Accuracy</div>
+    <div class="metric-value" id="m-val-acc">—</div>
+    <div class="metric-sub">Validation set</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-label">Precision</div>
+    <div class="metric-value" id="m-precision">—</div>
+    <div class="metric-sub">Weighted average</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-label">Recall</div>
+    <div class="metric-value" id="m-recall">—</div>
+    <div class="metric-sub">Weighted average</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-label">F1-Score</div>
+    <div class="metric-value" id="m-f1">—</div>
+    <div class="metric-sub">Weighted average</div>
+  </div>
+</div>
+
+<!-- Charts row -->
+<div class="charts-grid">
+  <!-- Loss curve -->
+  <div class="card chart-card">
+    <div class="card-header">
+      <span class="card-title">Training &amp; Validation Loss</span>
+      <div class="chart-legend">
+        <span class="legend-dot legend-train"></span><span class="legend-label">Train</span>
+        <span class="legend-dot legend-val"></span><span class="legend-label">Validation</span>
+      </div>
+    </div>
+    <div class="card-body chart-body">
+      <canvas id="chart-loss" aria-label="Loss curve chart"></canvas>
+    </div>
+  </div>
+
+  <!-- Per-class accuracy -->
+  <div class="card chart-card">
+    <div class="card-header">
+      <span class="card-title">Per-Class Accuracy</span>
+    </div>
+    <div class="card-body chart-body">
+      <canvas id="chart-class" aria-label="Per-class accuracy chart"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- Info row -->
+<div class="info-grid">
+  <!-- Training config -->
+  <div class="card">
+    <div class="card-header"><span class="card-title">Training Configuration</span></div>
+    <div class="card-body">
+      <table class="info-table">
+        <tbody>
+          <tr><td class="info-key">Algorithm</td><td class="info-val">Random Forest Classifier</td></tr>
+          <tr><td class="info-key">Estimators</td><td class="info-val">200 trees</td></tr>
+          <tr><td class="info-key">Epochs (display)</td><td class="info-val" id="cfg-epochs">—</td></tr>
+          <tr><td class="info-key">Train / Val / Test Split</td><td class="info-val">72 / 13 / 15 %</td></tr>
+          <tr><td class="info-key">Feature Vector</td><td class="info-val">63 (21 landmarks × xyz)</td></tr>
+          <tr><td class="info-key">Classes</td><td class="info-val">26 (A–Z)</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Dataset info -->
+  <div class="card">
+    <div class="card-header"><span class="card-title">Dataset Information</span></div>
+    <div class="card-body">
+      <table class="info-table">
+        <tbody>
+          <tr><td class="info-key">Source</td><td class="info-val">Kaggle ASL Alphabet (or synthetic demo)</td></tr>
+          <tr><td class="info-key">Samples (typical)</td><td class="info-val">~87,000 images</td></tr>
+          <tr><td class="info-key">Classes</td><td class="info-val">26 letters (A–Z)</td></tr>
+          <tr><td class="info-key">Samples per class</td><td class="info-val">~3,000 images</td></tr>
+          <tr><td class="info-key">Image size</td><td class="info-val">200 × 200 px</td></tr>
+          <tr><td class="info-key">Landmark extractor</td><td class="info-val">MediaPipe Hands v0.10</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/performance.js') }}"></script>
+{% endblock %}
+
