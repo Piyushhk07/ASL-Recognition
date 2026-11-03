@@ -1,7 +1,7 @@
 /**
  * ASL Vision — recognition.js
  * Handles camera, frame capture, prediction, landmark drawing,
- * FPS stats, sentence builder, and gesture history.
+ * FPS stats, sentence builder, gesture history, and diagnostic panel.
  */
 
 /* ===================================================================
@@ -16,13 +16,21 @@ const HAND_CONNECTIONS = [
   [5,9],[9,13],[13,17],             // palm
 ];
 
-const CAPTURE_FPS        = 10;   // target prediction rate
-const HISTORY_MAX        = 8;    // max chips in history
+const CAPTURE_FPS        = 10;     // target prediction rate
+const HISTORY_MAX        = 8;      // max chips in history
 
 // Temporal smoothing — require a letter to appear in ≥VOTE_THRESHOLD
 // of the last VOTE_WINDOW frames before committing it to the display.
 const VOTE_WINDOW    = 7;
 const VOTE_THRESHOLD = 4;
+
+// Confidence threshold: predictions below this are treated as "uncertain"
+// and are NOT added to gesture history or the sentence.
+const CONF_THRESHOLD = 0.40;
+
+// Cooldown between auto-accepted letters (ms).  Prevents the same letter
+// firing dozens of times per second just because you're holding the pose.
+const LETTER_COOLDOWN_MS = 1500;
 
 /* ===================================================================
    STATE
@@ -37,6 +45,15 @@ let modelLoaded      = false;
 
 // Temporal smoothing buffer
 let predictionBuffer = [];   // rolling window of raw letter predictions
+
+// Cooldown — time of the last accepted letter (auto-add to history)
+let lastAcceptedTime = 0;
+
+// Diagnostic mode
+let diagEnabled      = false;
+
+// Inference latency (ms) for diagnostic display
+let lastLatencyMs    = 0;
 
 // FPS tracking
 let lastFrameTime    = 0;
@@ -83,6 +100,13 @@ const btnCopy        = document.getElementById('btn-copy');
 const historyChips   = document.getElementById('history-chips');
 const btnClearHist   = document.getElementById('btn-clear-history');
 
+// Diagnostic panel refs
+const btnDiagToggle  = document.getElementById('btn-diag-toggle');
+const diagContent    = document.getElementById('diag-content');
+const diagCanvas     = document.getElementById('diag-canvas');
+const diagTop3       = document.getElementById('diag-top3');
+const diagStats      = document.getElementById('diag-stats');
+
 /* ===================================================================
    CAMERA
    =================================================================== */
@@ -119,6 +143,7 @@ function stopCamera() {
   showIdleOverlay();
   resetStats();
   predictionBuffer = [];   // clear smoothing buffer
+  lastAcceptedTime = 0;    // reset cooldown
   updatePrediction(null, 0);
 }
 
@@ -199,14 +224,19 @@ async function captureAndPredict() {
   if (!dataUrl) return;
 
   isProcessing = true;
+  const t0 = performance.now();
   try {
-    const res = await fetch('/api/predict', {
+    // In diagnostic mode use the richer /api/debug_frame endpoint
+    const endpoint = diagEnabled ? '/api/debug_frame' : '/api/predict';
+    const res = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ image: dataUrl }),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
+
+    lastLatencyMs = Math.round(performance.now() - t0);
 
     const handDetected = data.hand_detected === true;
     updateStats(handDetected, data.landmarks ? data.landmarks.length : 0);
@@ -217,16 +247,30 @@ async function captureAndPredict() {
       clearCanvas();
     }
 
-    if (data.letter) {
+    // ── Confidence threshold check ──────────────────────────────────────
+    const rawConf = data.confidence || 0;
+    const aboveThreshold = rawConf >= CONF_THRESHOLD;
+
+    if (data.letter && aboveThreshold) {
       // Apply temporal smoothing — only update display when vote is decisive
       const smoothed = getSmoothedPrediction(data.letter);
       if (smoothed) {
-        updatePrediction(smoothed, data.confidence || 0);
-        addToHistory(smoothed);
+        updatePrediction(smoothed, rawConf);
+
+        // Cooldown: only auto-add to history if enough time has passed
+        const now = Date.now();
+        if (now - lastAcceptedTime >= LETTER_COOLDOWN_MS) {
+          addToHistory(smoothed);
+          lastAcceptedTime = now;
+        }
       } else {
-        // Buffer not settled yet — show raw letter dimmed
-        updatePrediction(data.letter, data.confidence || 0, 'Stabilising…');
+        // Buffer still stabilising — show raw letter but mark as pending
+        updatePrediction(data.letter, rawConf, 'Stabilising\u2026');
       }
+    } else if (data.letter && !aboveThreshold) {
+      // Letter detected but confidence too low — reject and clear buffer
+      predictionBuffer = [];
+      updatePrediction(null, rawConf, 'Low confidence (' + Math.round(rawConf * 100) + '%)');
     } else {
       predictionBuffer = [];   // reset buffer on no-hand frames
       if (!handDetected) {
@@ -234,9 +278,15 @@ async function captureAndPredict() {
       } else if (data.error && data.error.includes('Model')) {
         updatePrediction(null, 0, 'Model not loaded');
       } else {
-        updatePrediction(null, 0, 'Detecting…');
+        updatePrediction(null, 0, 'Detecting\u2026');
       }
     }
+
+    // ── Diagnostic panel update ─────────────────────────────────────────
+    if (diagEnabled) {
+      updateDiagPanel(data, lastLatencyMs);
+    }
+
   } catch (err) {
     console.error('[recognition.js] Predict error:', err.message);
   } finally {
@@ -436,6 +486,98 @@ if (btnClearHist) {
    =================================================================== */
 if (btnStart) { btnStart.addEventListener('click', startCamera); }
 if (btnStop)  { btnStop.addEventListener('click',  stopCamera);  }
+
+/* ===================================================================
+   DIAGNOSTIC PANEL
+   =================================================================== */
+const btnDiagToggle  = document.getElementById('btn-diag-toggle');
+const diagContent    = document.getElementById('diag-content');
+const diagCanvas     = document.getElementById('diag-canvas');
+const diagTop3       = document.getElementById('diag-top3');
+const diagStats      = document.getElementById('diag-stats');
+
+function toggleDiagMode() {
+  diagEnabled = !diagEnabled;
+  if (btnDiagToggle) {
+    btnDiagToggle.textContent = diagEnabled ? 'Disable' : 'Enable';
+    btnDiagToggle.className   = diagEnabled
+      ? 'btn btn-warning btn-sm'
+      : 'btn btn-ghost btn-sm';
+  }
+  if (diagContent) {
+    diagContent.style.display = diagEnabled ? '' : 'none';
+  }
+  if (!diagEnabled && diagCanvas) {
+    const c = diagCanvas.getContext('2d');
+    c.clearRect(0, 0, diagCanvas.width, diagCanvas.height);
+  }
+}
+
+/**
+ * Update the diagnostic panel with data returned from /api/debug_frame.
+ * @param {Object} data   - API response object
+ * @param {number} latMs  - request round-trip latency in milliseconds
+ */
+function updateDiagPanel(data, latMs) {
+  // 28x28 preview (nearest-neighbour upscaled to 112x112)
+  if (diagCanvas && data.crop_b64) {
+    const img = new Image();
+    img.onload = () => {
+      const c = diagCanvas.getContext('2d');
+      c.imageSmoothingEnabled = false;   // nearest-neighbour = crisp pixels
+      c.drawImage(img, 0, 0, diagCanvas.width, diagCanvas.height);
+    };
+    img.src = data.crop_b64;
+  } else if (diagCanvas && !data.crop_b64) {
+    const c = diagCanvas.getContext('2d');
+    c.fillStyle = '#1E2433';
+    c.fillRect(0, 0, diagCanvas.width, diagCanvas.height);
+    c.fillStyle = '#64748B';
+    c.font = '11px Inter, sans-serif';
+    c.textAlign = 'center';
+    c.fillText('No hand', diagCanvas.width / 2, diagCanvas.height / 2);
+  }
+
+  // Top-3 predictions table
+  if (diagTop3) {
+    const top3 = data.top3 || [];
+    if (top3.length === 0) {
+      diagTop3.innerHTML = '<span class="diag-empty">No predictions</span>';
+    } else {
+      diagTop3.innerHTML = top3.map((p, i) => {
+        const pct  = Math.round(p.confidence * 100);
+        const rank = i === 0 ? 'diag-rank-1' : 'diag-rank';
+        return `<div class="diag-row ${rank}">
+          <span class="diag-letter">${p.letter}</span>
+          <div class="diag-bar-wrap">
+            <div class="diag-bar" style="width:${pct}%"></div>
+          </div>
+          <span class="diag-pct">${pct}%</span>
+        </div>`;
+      }).join('');
+    }
+  }
+
+  // Stats row
+  if (diagStats) {
+    const threshPct = Math.round(CONF_THRESHOLD * 100);
+    const stab      = predictionBuffer.length
+      ? `${predictionBuffer.filter(l => l === data.letter).length}/${VOTE_WINDOW}`
+      : '0/' + VOTE_WINDOW;
+    diagStats.innerHTML =
+      `<span class="diag-stat-item"><span class="diag-stat-label">Latency</span> ${latMs} ms</span>` +
+      `<span class="diag-stat-sep"></span>` +
+      `<span class="diag-stat-item"><span class="diag-stat-label">Min. confidence</span> ${threshPct}%</span>` +
+      `<span class="diag-stat-sep"></span>` +
+      `<span class="diag-stat-item"><span class="diag-stat-label">Stability</span> ${stab}</span>` +
+      `<span class="diag-stat-sep"></span>` +
+      `<span class="diag-stat-item"><span class="diag-stat-label">FPS</span> ${displayFPS}</span>`;
+  }
+}
+
+if (btnDiagToggle) {
+  btnDiagToggle.addEventListener('click', toggleDiagMode);
+}
 
 /* ===================================================================
    API STATUS LISTENER (from app.js)

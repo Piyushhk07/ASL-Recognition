@@ -30,6 +30,7 @@ section('1. FILE INTEGRITY')
 files = {
     'app.py':                       5_000,
     'train_model.py':               5_000,
+    'preprocess.py':                1_500,   # shared preprocessing pipeline
     'features.py':                  2_000,
     'mnist_features.py':            1_000,
     'requirements.txt':             50,
@@ -241,6 +242,21 @@ try:
           r.status_code == 400, 'HTTP ' + str(r.status_code))
 except Exception as e:
     check('/api/predict (bad request)', False, str(e))
+
+# /api/debug_frame -- blank frame, no hand
+try:
+    img = np.zeros((480, 640, 3), np.uint8)
+    _, buf = cv2.imencode('.jpg', img, [cv2.IMWRITE_JPEG_QUALITY, 80])
+    b64 = 'data:image/jpeg;base64,' + base64.b64encode(buf).decode()
+    r   = requests.post(BASE + '/api/debug_frame', json={'image': b64}, timeout=12)
+    d   = r.json()
+    check('/api/debug_frame returns 200',               r.status_code == 200)
+    check('debug_frame blank -> hand_detected = false', d.get('hand_detected') is False,
+          str(d.get('hand_detected')))
+    check('debug_frame has preprocess_info field',
+          'preprocess_info' in d, str(list(d.keys())[:4]))
+except Exception as e:
+    check('/api/debug_frame', False, str(e))
 
 
 # --------------------------------------------------------------------------

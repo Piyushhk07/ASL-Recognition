@@ -3,7 +3,14 @@ ASL Vision - Real-Time American Sign Language Recognition
 Flask Backend Application
 Compatible with MediaPipe >= 1.0 (Tasks API only)
 Training: ASL Sign MNIST dataset (sign_mnist_train/test.csv)
-Inference: MediaPipe hand bounding box -> 28x28 grayscale crop -> 840-d features
+Inference: MediaPipe hand bounding box -> preprocess.py -> 28x28 grayscale crop -> 840-d features
+
+Preprocessing note (critical for accuracy):
+  - NO CLAHE applied at inference (MNIST CSV has no CLAHE, applying only at
+    inference causes distribution mismatch and wrong predictions).
+  - Shared preprocess.py used for both training and inference.
+  - Bounding box uses absolute padding (30% of bbox side) so padding scales
+    correctly for hands at different distances from the camera.
 """
 
 import os
@@ -26,6 +33,13 @@ try:
 except ImportError:
     MNIST_FEATURES_AVAILABLE = False
     NUM_FEATURES = 840
+
+# Shared preprocessing pipeline (NO CLAHE — must match train_model.py)
+try:
+    from preprocess import preprocess_bgr_crop
+    PREPROCESS_AVAILABLE = True
+except ImportError:
+    PREPROCESS_AVAILABLE = False
 
 # Legacy landmark features (kept for /collect page compatibility)
 try:
@@ -194,18 +208,26 @@ def _decode_image(data_uri: str):
 
 def _detect_hand_and_extract(bgr_img):
     """
-    Run MediaPipe on the full webcam frame.
+    Run MediaPipe on the full webcam frame, crop the hand region, and
+    extract 840-d features using the same preprocessing as train_model.py.
+
+    Key fixes vs. previous version:
+      1. NO CLAHE — MNIST training images have no CLAHE; applying it only
+         at inference created a domain shift of ~0.14 mean pixel difference.
+      2. Absolute bounding-box padding — padding = 30% of the longer bbox
+         side, so padding scales correctly for hands at different distances.
+      3. Square crop with aspect-ratio preserved before 28×28 resize.
+      4. Uses preprocess.preprocess_bgr_crop() — same code path as training.
 
     Returns
     -------
-    features : np.ndarray or None
-        840-d pixel feature vector derived from the cropped hand region.
-        None if no hand detected or MediaPipe unavailable.
-    xy_pairs : list of [x, y]
-        Normalised landmark coordinates for canvas overlay (21 points).
+    features  : np.ndarray or None   — 840-d feature vector
+    xy_pairs  : list of [x, y]       — normalised landmark coords (21 pts)
+    crop28    : np.ndarray or None   — float32 (28,28) preprocessed image
+                                       for debug endpoint
     """
     if not MEDIAPIPE_AVAILABLE or _mp_detector is None:
-        return None, []
+        return None, [], None
 
     try:
         import mediapipe as mp
@@ -215,24 +237,28 @@ def _detect_hand_and_extract(bgr_img):
         result = _mp_detector.detect(mp_img)
 
         if not result.hand_landmarks:
-            return None, []
+            return None, [], None
 
         hand   = result.hand_landmarks[0]
         xy     = [[lm.x, lm.y] for lm in hand]
 
-        # ── Compute bounding box from landmark positions ──────────────────
+        # ── Bounding box ──────────────────────────────────────────────────
         xs     = [lm.x for lm in hand]
         ys     = [lm.y for lm in hand]
         x_span = max(xs) - min(xs)
         y_span = max(ys) - min(ys)
-        PAD    = 0.22   # 22% padding so the full hand fits
+        # FIXED: use absolute padding = 30% of the longer side of the bbox.
+        # Previous code used PAD * x_span and PAD * y_span separately which
+        # made the crop too tight for small/distant hands.
+        side   = max(x_span, y_span)
+        PAD    = side * 0.30
 
-        x1 = max(0.0, min(xs) - PAD * x_span)
-        x2 = min(1.0, max(xs) + PAD * x_span)
-        y1 = max(0.0, min(ys) - PAD * y_span)
-        y2 = min(1.0, max(ys) + PAD * y_span)
+        x1 = max(0.0, min(xs) - PAD)
+        x2 = min(1.0, max(xs) + PAD)
+        y1 = max(0.0, min(ys) - PAD)
+        y2 = min(1.0, max(ys) + PAD)
 
-        # Make crop square (sign-MNIST images are square)
+        # Make crop square so 28×28 resize doesn't distort hand proportions
         cx     = (x1 + x2) / 2
         cy     = (y1 + y2) / 2
         half   = max((x2 - x1), (y2 - y1)) / 2
@@ -249,18 +275,18 @@ def _detect_hand_and_extract(bgr_img):
 
         crop = bgr_img[py1:py2, px1:px2]
         if crop.size == 0 or crop.shape[0] < 4 or crop.shape[1] < 4:
-            return None, xy   # Return landmarks for overlay even if crop fails
+            return None, xy, None   # Return landmarks for overlay even if crop fails
 
-        # ── Preprocess to match Sign-MNIST format ─────────────────────────
-        # 1. Grayscale
-        gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
-        # 2. CLAHE contrast normalisation (handles lighting variation)
-        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(4, 4))
-        gray  = clahe.apply(gray)
-        # 3. Resize to 28×28
-        gray28 = cv2.resize(gray, (28, 28), interpolation=cv2.INTER_AREA)
-        # 4. Normalise to [0, 1]
-        normed = gray28.astype(np.float32) / 255.0
+        # ── Preprocess using shared pipeline (no CLAHE) ───────────────────
+        if PREPROCESS_AVAILABLE:
+            normed = preprocess_bgr_crop(crop)   # float32 (28,28), [0,1]
+        else:
+            # Fallback if preprocess.py unavailable (should not happen)
+            gray   = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+            gray28 = cv2.resize(gray, (28, 28), interpolation=cv2.INTER_AREA)
+            normed = gray28.astype(np.float32) / 255.0
+
+        crop28 = normed.copy()   # save for debug endpoint
 
         # ── Extract 840-d features ────────────────────────────────────────
         if MNIST_FEATURES_AVAILABLE:
@@ -268,11 +294,11 @@ def _detect_hand_and_extract(bgr_img):
         else:
             feat = normed.flatten()   # raw 784, graceful degradation
 
-        return feat, xy
+        return feat, xy, crop28
 
     except Exception as exc:
         logger.error("Hand detection / feature extraction error: %s", exc)
-        return None, []
+        return None, [], None
 
 
 # Kept for /collect page (landmark-based collection)
@@ -406,7 +432,7 @@ def api_predict():
             "letter": None, "confidence": 0, "landmarks": [],
         }), 400
 
-    features, xy_pairs = _detect_hand_and_extract(bgr)
+    features, xy_pairs, _ = _detect_hand_and_extract(bgr)
 
     if features is None:
         return jsonify({
@@ -437,11 +463,23 @@ def api_predict():
             class_val = model.classes_[raw_idx] if hasattr(model, "classes_") else raw_idx
             letter    = _idx_to_letter(class_val)
 
+        # Top-3 predictions for diagnostic display
+        top3_indices = np.argsort(proba)[::-1][:3]
+        top3 = []
+        for idx in top3_indices:
+            if label_encoder is not None:
+                ltr = str(label_encoder.inverse_transform([int(idx)])[0])
+            else:
+                cv  = model.classes_[int(idx)] if hasattr(model, "classes_") else int(idx)
+                ltr = _idx_to_letter(cv)
+            top3.append({"letter": ltr, "confidence": round(float(proba[idx]), 4)})
+
         return jsonify({
             "letter": letter,
             "confidence": confidence,
             "landmarks": xy_pairs,
             "hand_detected": True,
+            "top3": top3,
         })
     except Exception as exc:
         logger.error("Prediction error: %s", exc)
@@ -450,6 +488,90 @@ def api_predict():
             "letter": None, "confidence": 0,
             "landmarks": xy_pairs, "hand_detected": True,
         }), 500
+
+
+@app.route("/api/debug_frame", methods=["POST"])
+def api_debug_frame():
+    """
+    Diagnostic endpoint: same as /api/predict but also returns:
+      - crop_b64: base64-encoded PNG of the 28x28 preprocessed image
+        (upscaled 4x to 112x112 for visibility)
+      - top3: top-3 class predictions with confidence scores
+      - preprocess_info: notes on the pipeline applied
+
+    Lets the developer inspect exactly what the model sees.
+    """
+    data       = request.get_json(force=True, silent=True) or {}
+    image_data = data.get("image", "")
+
+    if not image_data:
+        return jsonify({"error": "No image provided"}), 400
+
+    try:
+        bgr = _decode_image(image_data)
+    except Exception as exc:
+        return jsonify({"error": "Invalid image: " + str(exc)}), 400
+
+    if bgr is None:
+        return jsonify({"error": "Could not decode image"}), 400
+
+    features, xy_pairs, crop28 = _detect_hand_and_extract(bgr)
+
+    resp = {
+        "hand_detected": features is not None,
+        "landmarks":     xy_pairs,
+        "letter":        None,
+        "confidence":    0,
+        "top3":          [],
+        "crop_b64":      None,
+        "preprocess_info": "gray -> INTER_AREA 28x28 -> /255 (no CLAHE)",
+    }
+
+    # Encode the 28x28 image as base64 PNG (upscaled 4x for readability)
+    if crop28 is not None:
+        try:
+            vis = np.clip(crop28 * 255, 0, 255).astype(np.uint8)
+            vis_big = cv2.resize(vis, (112, 112), interpolation=cv2.INTER_NEAREST)
+            ok, buf = cv2.imencode(".png", vis_big)
+            if ok:
+                resp["crop_b64"] = "data:image/png;base64," + base64.b64encode(
+                    buf.tobytes()).decode("ascii")
+        except Exception as exc:
+            logger.warning("Debug crop encode error: %s", exc)
+
+    if features is None:
+        resp["error"] = "No hand detected" if MEDIAPIPE_AVAILABLE else "MediaPipe not available"
+        return jsonify(resp)
+
+    if model is None:
+        resp["error"] = "Model not loaded"
+        return jsonify(resp)
+
+    try:
+        proba        = model.predict_proba(features.reshape(1, -1))[0]
+        raw_idx      = int(np.argmax(proba))
+        resp["confidence"] = float(proba[raw_idx])
+
+        if label_encoder is not None:
+            resp["letter"] = str(label_encoder.inverse_transform([raw_idx])[0])
+        else:
+            cv_val = model.classes_[raw_idx] if hasattr(model, "classes_") else raw_idx
+            resp["letter"] = _idx_to_letter(cv_val)
+
+        top3_indices = np.argsort(proba)[::-1][:3]
+        for idx in top3_indices:
+            if label_encoder is not None:
+                ltr = str(label_encoder.inverse_transform([int(idx)])[0])
+            else:
+                cv_val = model.classes_[int(idx)] if hasattr(model, "classes_") else int(idx)
+                ltr    = _idx_to_letter(cv_val)
+            resp["top3"].append({"letter": ltr, "confidence": round(float(proba[idx]), 4)})
+
+    except Exception as exc:
+        logger.error("Debug predict error: %s", exc)
+        resp["error"] = str(exc)
+
+    return jsonify(resp)
 
 
 @app.route("/api/metrics")

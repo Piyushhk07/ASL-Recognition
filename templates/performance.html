@@ -6,7 +6,7 @@
 <div class="page-header">
   <div>
     <h1 class="page-title">Model Performance</h1>
-    <p class="page-subtitle">Training metrics, loss curves, and per-class accuracy for the ASL classifier</p>
+    <p class="page-subtitle">Evaluated on the held-out Sign MNIST test set (7,172 samples, never seen during training)</p>
   </div>
   <button class="btn btn-secondary" id="btn-refresh-metrics">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -16,22 +16,25 @@
   </button>
 </div>
 
+<!-- Accuracy source notice -->
+<div class="notice-bar" id="accuracy-notice" style="display:none"></div>
+
 <!-- Metrics grid -->
 <div class="metrics-grid">
   <div class="metric-card">
     <div class="metric-label">Test Accuracy</div>
     <div class="metric-value" id="m-test-acc">—</div>
-    <div class="metric-sub">Held-out test set</div>
+    <div class="metric-sub">Held-out Sign MNIST test set</div>
   </div>
   <div class="metric-card">
     <div class="metric-label">Train Accuracy</div>
     <div class="metric-value" id="m-train-acc">—</div>
-    <div class="metric-sub">Training set</div>
+    <div class="metric-sub">Training set (augmented)</div>
   </div>
   <div class="metric-card">
     <div class="metric-label">Val Accuracy</div>
     <div class="metric-value" id="m-val-acc">—</div>
-    <div class="metric-sub">Validation set</div>
+    <div class="metric-sub">Internal validation split</div>
   </div>
   <div class="metric-card">
     <div class="metric-label">Precision</div>
@@ -77,20 +80,38 @@
   </div>
 </div>
 
+<!-- Confusion matrix (full width, shown when available) -->
+<div class="card" id="cm-card" style="margin-top:var(--s16);display:none">
+  <div class="card-header">
+    <span class="card-title">Confusion Matrix</span>
+    <span class="badge" style="font-size:0.72rem">Sign MNIST test set</span>
+  </div>
+  <div class="card-body" style="overflow-x:auto;padding:var(--s16)">
+    <canvas id="chart-cm" aria-label="Confusion matrix"
+      style="max-width:100%;display:block;margin:0 auto"></canvas>
+    <p style="font-size:0.72rem;color:var(--text-secondary);margin-top:8px;text-align:center">
+      Rows = true labels &nbsp;|&nbsp; Columns = predicted labels &nbsp;|&nbsp;
+      Darker cell = more predictions &nbsp;|&nbsp; Diagonal = correct
+    </p>
+  </div>
+</div>
+
 <!-- Info row -->
-<div class="info-grid">
+<div class="info-grid" style="margin-top:var(--s16)">
   <!-- Training config -->
   <div class="card">
     <div class="card-header"><span class="card-title">Training Configuration</span></div>
     <div class="card-body">
       <table class="info-table">
         <tbody>
-          <tr><td class="info-key">Algorithm</td><td class="info-val">Random Forest Classifier</td></tr>
-          <tr><td class="info-key">Estimators</td><td class="info-val">200 trees</td></tr>
-          <tr><td class="info-key">Epochs (display)</td><td class="info-val" id="cfg-epochs">—</td></tr>
-          <tr><td class="info-key">Train / Val / Test Split</td><td class="info-val">72 / 13 / 15 %</td></tr>
-          <tr><td class="info-key">Feature Vector</td><td class="info-val">63 (21 landmarks × xyz)</td></tr>
-          <tr><td class="info-key">Classes</td><td class="info-val">26 (A–Z)</td></tr>
+          <tr><td class="info-key">Algorithm</td><td class="info-val">RF + MLP soft-voting ensemble</td></tr>
+          <tr><td class="info-key">RF estimators</td><td class="info-val">150 trees, class_weight=balanced</td></tr>
+          <tr><td class="info-key">MLP layers</td><td class="info-val">512 → 256 → 128, ReLU, StandardScaler</td></tr>
+          <tr><td class="info-key">Augmentation</td><td class="info-val" id="cfg-augment">—</td></tr>
+          <tr><td class="info-key">Feature vector</td><td class="info-val" id="cfg-features">840 (784 pixels + 56 gradients)</td></tr>
+          <tr><td class="info-key">Classes</td><td class="info-val" id="cfg-classes">24 (A–Y, excluding J &amp; Z)</td></tr>
+          <tr><td class="info-key">Dataset size</td><td class="info-val" id="cfg-dataset">—</td></tr>
+          <tr><td class="info-key">Preprocessing</td><td class="info-val">Grayscale → INTER_AREA 28×28 → /255 (no CLAHE)</td></tr>
         </tbody>
       </table>
     </div>
@@ -102,12 +123,13 @@
     <div class="card-body">
       <table class="info-table">
         <tbody>
-          <tr><td class="info-key">Source</td><td class="info-val">Kaggle ASL Alphabet (or synthetic demo)</td></tr>
-          <tr><td class="info-key">Samples (typical)</td><td class="info-val">~87,000 images</td></tr>
-          <tr><td class="info-key">Classes</td><td class="info-val">26 letters (A–Z)</td></tr>
-          <tr><td class="info-key">Samples per class</td><td class="info-val">~3,000 images</td></tr>
-          <tr><td class="info-key">Image size</td><td class="info-val">200 × 200 px</td></tr>
-          <tr><td class="info-key">Landmark extractor</td><td class="info-val">MediaPipe Hands v0.10</td></tr>
+          <tr><td class="info-key">Source</td><td class="info-val">ASL Sign Language MNIST (Kaggle)</td></tr>
+          <tr><td class="info-key">Train samples</td><td class="info-val">27,455 (×4 with augmentation)</td></tr>
+          <tr><td class="info-key">Test samples</td><td class="info-val">7,172 (never augmented)</td></tr>
+          <tr><td class="info-key">Classes</td><td class="info-val">24 letters (A–Y, no J or Z)</td></tr>
+          <tr><td class="info-key">Image size</td><td class="info-val">28 × 28 px grayscale</td></tr>
+          <tr><td class="info-key">Landmark extractor</td><td class="info-val">MediaPipe Hands v1.2.0</td></tr>
+          <tr><td class="info-key">Real-world accuracy</td><td class="info-val">Not yet measured (requires labeled webcam samples)</td></tr>
         </tbody>
       </table>
     </div>
@@ -118,4 +140,3 @@
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/performance.js') }}"></script>
 {% endblock %}
-

@@ -1050,3 +1050,100 @@ body {
 .flex  { display: flex; }
 .items-center { align-items: center; }
 .gap-12 { gap: var(--s12); }
+
+/* =========================================================
+   DIAGNOSTIC PANEL  (recognition page)
+   ========================================================= */
+.diag-card { border-color: var(--border); }
+
+/* Top-3 prediction rows */
+.diag-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 0.82rem;
+}
+.diag-letter {
+  font-weight: 600;
+  font-size: 0.9rem;
+  min-width: 18px;
+  color: var(--text-primary);
+}
+.diag-rank-1 .diag-letter { color: var(--accent); }
+.diag-bar-wrap {
+  flex: 1;
+  height: 6px;
+  background: var(--surface-2, #1E2433);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.diag-bar {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.15s ease;
+}
+.diag-rank-1 .diag-bar { background: var(--accent); }
+.diag-rank   .diag-bar { background: var(--text-secondary); opacity: 0.5; }
+.diag-pct {
+  min-width: 32px;
+  text-align: right;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+.diag-empty {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+/* Diagnostic stats row (reuses .tech-stat classes) */
+.diag-stat-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.diag-stat-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+.diag-stat-sep {
+  width: 1px;
+  background: var(--border);
+  align-self: stretch;
+  margin: 0 4px;
+}
+
+/* btn-warning (used when diagnostic mode is active) */
+.btn-warning {
+  background: rgba(245, 158, 11, 0.12);
+  color: #F59E0B;
+  border: 1px solid rgba(245, 158, 11, 0.25);
+}
+.btn-warning:hover {
+  background: rgba(245, 158, 11, 0.20);
+}
+
+/* =========================================================
+   NOTICE BAR  (performance page accuracy source indicator)
+   ========================================================= */
+.notice-bar {
+  padding: 10px 16px;
+  border-radius: var(--radius, 6px);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  margin-bottom: var(--s16, 1rem);
+}
+.notice-info {
+  background: rgba(49, 87, 200, 0.07);
+  border: 1px solid rgba(49, 87, 200, 0.2);
+  color: #3157C8;
+}
+.notice-success {
+  background: rgba(16, 185, 129, 0.07);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  color: #059669;
+}

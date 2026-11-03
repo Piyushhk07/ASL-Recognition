@@ -141,6 +141,41 @@
       </div>
     </div>
 
+    <!-- Diagnostic panel (developer tool) -->
+    <div class="card diag-card" style="margin-top:var(--s4,1rem)">
+      <div class="card-header">
+        <span class="card-title">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:-1px">
+            <circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M4.93 4.93a10 10 0 0 0 0 14.14"/>
+          </svg>
+          Diagnostic Mode
+        </span>
+        <button class="btn btn-ghost btn-sm" id="btn-diag-toggle">Enable</button>
+      </div>
+      <div id="diag-content" style="display:none;padding:var(--s4,1rem)">
+        <!-- 28×28 preview -->
+        <div style="display:flex;gap:1rem;align-items:flex-start;margin-bottom:0.75rem">
+          <div>
+            <p style="font-size:0.7rem;color:var(--text-secondary);margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em">28×28 Input</p>
+            <canvas id="diag-canvas" width="112" height="112"
+              style="display:block;border:1px solid var(--border);border-radius:4px;image-rendering:pixelated;background:#1E2433">
+            </canvas>
+          </div>
+          <!-- Top-3 predictions -->
+          <div style="flex:1;min-width:0">
+            <p style="font-size:0.7rem;color:var(--text-secondary);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">Top-3 Predictions</p>
+            <div id="diag-top3">
+              <span class="diag-empty">Start camera to see predictions</span>
+            </div>
+          </div>
+        </div>
+        <!-- Stats row -->
+        <div id="diag-stats" class="tech-stats" style="flex-wrap:wrap;gap:0.5rem">
+          <span style="color:var(--text-secondary);font-size:0.75rem">Camera must be running</span>
+        </div>
+      </div>
+    </div>
+
   </div>
 </div>
 {% endblock %}
