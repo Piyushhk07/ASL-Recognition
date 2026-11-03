@@ -39,7 +39,7 @@ from sklearn.metrics import (
 import joblib
 
 from mnist_features import extract_features, NUM_FEATURES, LABEL_TO_LETTER
-from preprocess import augment_batch
+from preprocess import augment_batch, preprocess_mnist_row
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -78,8 +78,14 @@ def load_mnist(train_csv, test_csv, augment=True, rng=None):
     pixel_cols   = [c for c in train_df.columns if c != 'label']
 
     # Normalise to [0, 1]  — exactly what preprocess.py does for inference
-    X_tr_raw = train_df[pixel_cols].values.astype(np.float32) / 255.0
-    X_te_raw = test_df[pixel_cols].values.astype(np.float32)  / 255.0
+    # Apply histogram equalization to MNIST pixels (same as inference path)
+    # This ensures training and webcam images have the same contrast distribution
+    raw_tr = train_df[pixel_cols].values.astype(np.float32) / 255.0
+    raw_te = test_df[pixel_cols].values.astype(np.float32)  / 255.0
+    logger.info("Applying histogram equalization to training pixels...")
+    X_tr_raw = np.array([preprocess_mnist_row(r) for r in raw_tr], dtype=np.float32)
+    logger.info("Applying histogram equalization to test pixels...")
+    X_te_raw = np.array([preprocess_mnist_row(r) for r in raw_te], dtype=np.float32)
     y_tr_num = train_df['label'].values
     y_te_num = test_df['label'].values
 

@@ -247,11 +247,12 @@ def _detect_hand_and_extract(bgr_img):
         ys     = [lm.y for lm in hand]
         x_span = max(xs) - min(xs)
         y_span = max(ys) - min(ys)
-        # FIXED: use absolute padding = 30% of the longer side of the bbox.
+        # FIXED: use absolute padding = 20% of the longer side of the bbox.
         # Previous code used PAD * x_span and PAD * y_span separately which
         # made the crop too tight for small/distant hands.
+        # 20% (down from 30%) reduces inclusion of background / face pixels.
         side   = max(x_span, y_span)
-        PAD    = side * 0.30
+        PAD    = side * 0.20
 
         x1 = max(0.0, min(xs) - PAD)
         x2 = min(1.0, max(xs) + PAD)
@@ -524,7 +525,7 @@ def api_debug_frame():
         "confidence":    0,
         "top3":          [],
         "crop_b64":      None,
-        "preprocess_info": "gray -> INTER_AREA 28x28 -> /255 (no CLAHE)",
+        "preprocess_info": "gray -> INTER_AREA 28x28 -> equalizeHist -> /255",
     }
 
     # Encode the 28x28 image as base64 PNG (upscaled 4x for readability)

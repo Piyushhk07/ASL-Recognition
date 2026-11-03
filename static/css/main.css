@@ -1147,3 +1147,42 @@ body {
   border: 1px solid rgba(16, 185, 129, 0.2);
   color: #059669;
 }
+
+
+/* ==========================================================
+   TIPS BAR  (recognition page positioning guidance)
+   ========================================================== */
+.tips-bar {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 14px;
+  margin: 0 0 var(--s16, 1rem) 0;
+  background: rgba(49, 87, 200, 0.06);
+  border: 1px solid rgba(49, 87, 200, 0.18);
+  border-radius: var(--radius, 6px);
+  font-size: 0.8rem;
+  color: #3157C8;
+  line-height: 1.55;
+}
+.tips-bar svg {
+  color: #3157C8;
+}
+.tips-bar strong {
+  font-weight: 600;
+}
+.tips-close {
+  margin-left: auto;
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1.1rem;
+  line-height: 1;
+  color: #3157C8;
+  opacity: 0.6;
+  padding: 0 2px;
+}
+.tips-close:hover {
+  opacity: 1;
+}
