@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block title %}Data Collection — ASL Vision{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Data Collection</h1>
+    <p class="page-subtitle">Record your real hand landmarks to train a personalised model</p>
+  </div>
+  <div class="page-actions">
+    <button id="btn-train" class="btn btn-primary" disabled>
+      Train on Collected Data
+    </button>
+  </div>
+</div>
+
+<!-- Progress overview -->
+<div class="collect-overview card" style="margin-bottom:var(--s5);">
+  <div class="card-header">
+    <span class="card-title">Collection Progress</span>
+    <span id="overview-count" class="badge">0 / 26 letters ready</span>
+  </div>
+  <div class="progress-bar-track" style="margin-top:var(--s3);">
+    <div id="overview-bar" class="progress-bar-fill" style="width:0%"></div>
+  </div>
+  <div id="letter-progress-grid" class="letter-prog-grid" style="margin-top:var(--s4);"></div>
+</div>
+
+<!-- Main workspace -->
+<div class="collect-workspace">
+  <!-- LEFT: camera -->
+  <div class="collect-camera card">
+    <div class="card-header">
+      <span class="card-title">Camera Preview</span>
+      <span class="camera-status-pill">
+        <span id="camera-dot" class="camera-status-dot"></span>
+        <span id="camera-label">Inactive</span>
+      </span>
+    </div>
+
+    <div class="video-surface" id="video-surface">
+      <video id="video" autoplay muted playsinline></video>
+      <canvas id="canvas-overlay"></canvas>
+
+      <div id="video-idle" class="video-overlay-state">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15 10l4.553-2.069A1 1 0 0121 8.87v6.26a1 1 0 01-1.447.9L15 14M3 8a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/></svg>
+        <span>Start camera to begin</span>
+      </div>
+
+      <!-- Countdown overlay -->
+      <div id="countdown-overlay" class="countdown-overlay" style="display:none;">
+        <div id="countdown-num" class="countdown-num">3</div>
+        <div id="countdown-label" class="countdown-label">Get ready to sign</div>
+      </div>
+
+      <!-- Recording overlay -->
+      <div id="recording-overlay" class="recording-overlay" style="display:none;">
+        <div class="rec-dot"></div>
+        <span>Recording</span>
+        <span id="rec-count">0 / 60</span>
+      </div>
+    </div>
+
+    <div class="video-controls" style="margin-top:var(--s3);">
+      <button id="btn-start" class="btn btn-primary">Start Camera</button>
+      <button id="btn-stop"  class="btn btn-ghost"   style="display:none">Stop Camera</button>
+    </div>
+  </div>
+
+  <!-- RIGHT: letter selector + capture controls -->
+  <div class="collect-panel">
+
+    <!-- Current letter display -->
+    <div class="card" style="margin-bottom:var(--s4);">
+      <div class="card-header">
+        <span class="card-title">Current Letter</span>
+        <span id="letter-sample-count" class="badge">0 samples</span>
+      </div>
+      <div class="current-letter-display">
+        <div id="current-letter" class="collect-letter-big">A</div>
+        <div id="letter-status-msg" class="collect-letter-msg">Select a letter below and press Capture</div>
+      </div>
+      <div class="collect-capture-controls">
+        <button id="btn-capture" class="btn btn-primary" disabled>
+          Capture 60 Samples
+        </button>
+        <button id="btn-redo" class="btn btn-ghost" disabled>Redo Letter</button>
+      </div>
+    </div>
+
+    <!-- Letter grid -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Select Letter</span>
+        <span class="label-muted">Click a letter to target it</span>
+      </div>
+      <div id="letter-select-grid" class="letter-sel-grid"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Training log -->
+<div id="train-log-section" class="card" style="margin-top:var(--s5);display:none;">
+  <div class="card-header">
+    <span class="card-title">Training Log</span>
+    <span id="train-status-badge" class="badge">Idle</span>
+  </div>
+  <pre id="train-log" class="train-log-pre"></pre>
+</div>
+
+<style>
+/* ── Collect page layout ───────────────────────────────── */
+.collect-workspace{display:grid;grid-template-columns:1fr 380px;gap:var(--s5);align-items:start;}
+.collect-camera{padding:0;}
+.collect-camera .card-header{padding:var(--s4) var(--s5);}
+.collect-panel{}
+
+/* letter progress grid */
+.letter-prog-grid{display:grid;grid-template-columns:repeat(13,1fr);gap:4px;}
+.lp-cell{height:6px;border-radius:2px;background:var(--border);}
+.lp-cell.done{background:var(--success);}
+.lp-cell.partial{background:var(--warning);}
+
+/* current letter */
+.current-letter-display{display:flex;flex-direction:column;align-items:center;padding:var(--s5) 0 var(--s3);}
+.collect-letter-big{font-size:96px;font-weight:700;line-height:1;color:var(--text-primary);font-feature-settings:'tnum';}
+.collect-letter-msg{font-size:13px;color:var(--text-secondary);margin-top:var(--s2);}
+.collect-capture-controls{display:flex;gap:var(--s3);padding:var(--s4) var(--s5);}
+.collect-capture-controls .btn{flex:1;}
+
+/* letter selector */
+.letter-sel-grid{display:grid;grid-template-columns:repeat(9,1fr);gap:6px;padding:var(--s4) var(--s5);}
+.ls-cell{display:flex;align-items:center;justify-content:center;height:36px;border-radius:var(--radius);border:1px solid var(--border);font-size:13px;font-weight:600;cursor:pointer;transition:background 100ms,border-color 100ms;color:var(--text-primary);}
+.ls-cell:hover{background:var(--bg-page);border-color:var(--accent);}
+.ls-cell.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+.ls-cell.done{border-color:var(--success);color:var(--success);}
+.ls-cell.done.active{background:var(--success);color:#fff;}
+
+/* countdown overlay */
+.countdown-overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(15,17,23,0.82);z-index:10;}
+.countdown-num{font-size:96px;font-weight:700;color:#fff;line-height:1;}
+.countdown-label{font-size:16px;color:rgba(255,255,255,0.7);margin-top:8px;}
+
+/* recording overlay */
+.recording-overlay{position:absolute;top:12px;left:12px;display:flex;align-items:center;gap:8px;background:rgba(220,38,38,0.9);border-radius:6px;padding:6px 12px;color:#fff;font-size:13px;font-weight:600;z-index:10;}
+.rec-dot{width:8px;height:8px;border-radius:50%;background:#fff;}
+
+/* train log */
+.train-log-pre{background:var(--bg-page);border:1px solid var(--border);border-radius:var(--radius);padding:var(--s4);font-size:12px;line-height:1.6;max-height:240px;overflow-y:auto;margin-top:var(--s3);white-space:pre-wrap;color:var(--text-secondary);}
+
+.video-controls{padding:0 var(--s5) var(--s5);}
+
+.progress-bar-track{height:6px;background:var(--border);border-radius:3px;overflow:hidden;}
+.progress-bar-fill{height:100%;background:var(--accent);border-radius:3px;transition:width 300ms;}
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/collect.js"></script>
+{% endblock %}
