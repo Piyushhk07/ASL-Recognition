@@ -100,7 +100,7 @@ const btnCopy        = document.getElementById('btn-copy');
 const historyChips   = document.getElementById('history-chips');
 const btnClearHist   = document.getElementById('btn-clear-history');
 
-// Diagnostic panel refs
+// Diagnostic panel DOM refs (declared once here, used in DIAGNOSTIC PANEL section below)
 const btnDiagToggle  = document.getElementById('btn-diag-toggle');
 const diagContent    = document.getElementById('diag-content');
 const diagCanvas     = document.getElementById('diag-canvas');
@@ -490,12 +490,6 @@ if (btnStop)  { btnStop.addEventListener('click',  stopCamera);  }
 /* ===================================================================
    DIAGNOSTIC PANEL
    =================================================================== */
-const btnDiagToggle  = document.getElementById('btn-diag-toggle');
-const diagContent    = document.getElementById('diag-content');
-const diagCanvas     = document.getElementById('diag-canvas');
-const diagTop3       = document.getElementById('diag-top3');
-const diagStats      = document.getElementById('diag-stats');
-
 function toggleDiagMode() {
   diagEnabled = !diagEnabled;
   if (btnDiagToggle) {
