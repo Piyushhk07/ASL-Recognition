@@ -13,8 +13,15 @@ venv/
 .venv/
 env/
 
-# MediaPipe model binary (large, auto-downloaded on startup)
+# Large model binaries (auto-generated — run train_model.py to recreate)
+model/asl_model.pkl
+model/*.pkl
+
+# MediaPipe model binary (auto-downloaded on first startup)
 model/hand_landmarker.task
+
+# Collected real-hand data (user-specific, generate with /collect page)
+data/
 
 # OS
 .DS_Store
